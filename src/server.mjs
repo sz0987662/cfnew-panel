@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { createSubscriptionEngine } from './engine.mjs';
 import { isPublicAddress, fetchPreferredList, probePreferred } from './preferred.mjs';
 import { PANEL_VERSION, coreRelease } from './release.mjs';
+import { 解析合并清单, 生成合并订阅, 默认标签 } from './merge.mjs';
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const privateTesting = process.env.CFNEW_ALLOW_PRIVATE === 'yes';
@@ -146,6 +147,37 @@ async function handleWorkerApi(request, workerBase, access, suffix) {
   } catch (error) { return Response.json({ success: false, message: error.message }, { status: error.status || 400 }); }
 }
 
+// 合并订阅：一次给出多个 Worker，节点合到一份订阅里。
+// 域名与 UUID 沿用单 Worker 的校验规则，固定 Worker 的面板仍然只认自己那一个。
+async function handleMergeSubscription(request, url) {
+  let 条目;
+  try {
+    条目 = 解析合并清单(url.searchParams.get('workers')).map(项 => {
+      const workerBase = selectWorker(项.host);
+      const access = normalizeAccess(项.uuid);
+      const 标签 = 项.name || 默认标签(workerBase);
+      return { workerBase, access, prefix: '[' + 标签 + '] ' };
+    });
+  } catch (error) {
+    return new Response('订阅更新失败：' + String(error.message || '清单无效'), {
+      status: error.status || 400,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }
+    });
+  }
+  try {
+    const 订阅网址 = new URL(url.origin + '/merge/sub');
+    const target = url.searchParams.get('target');
+    if (target) 订阅网址.searchParams.set('target', target);
+    return await 生成合并订阅(new Request(订阅网址, { headers: request.headers }), 条目, loadWorkerConfig);
+  } catch (error) {
+    const message = String(error.message || '合并订阅失败');
+    return new Response('订阅更新失败：' + message, {
+      status: error.status || 503,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }
+    });
+  }
+}
+
 export async function handlePanel(request) {
   const url = new URL(request.url);
   if (url.pathname.startsWith('/worker-api/')) {
@@ -176,6 +208,7 @@ export async function handlePanel(request) {
   if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('只支持 GET', { status: 405 });
   if (url.pathname === '/health') return Response.json({ ok: true });
   if (url.pathname === '/rules-license') return new Response(rulesLicense, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=86400' } });
+  if (url.pathname === '/merge/sub') return await handleMergeSubscription(request, url);
   if (url.pathname === '/') {
     if (boundWorker) return new Response('hello', { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
     try { return new Response(landing, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }); }

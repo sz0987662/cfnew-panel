@@ -6,6 +6,7 @@ import test from 'node:test';
 process.env.CFNEW_ALLOW_PRIVATE = 'yes';
 const { handlePanel } = await import('../server.mjs');
 const version = '2026.10.17.2';
+const panelVersion = '2026.10.18.1';
 const uuid = '351c9981-04b6-4103-aa4b-864aa9c91469';
 const source = await readFile(process.env.CFNEW_TEST_CORE || new URL('../../明文源吗', import.meta.url), 'utf8');
 const worker = (await import('data:text/javascript;base64,' + Buffer.from(source.replace(/import\s*\{\s*connect as ([^}]+)\}\s*from\s*['"]cloudflare:sockets['"];/, (_, name) => 'const ' + name.trim() + ' = () => { throw new Error("此测试不建立代理连接"); };')).toString('base64'))).default;
@@ -23,7 +24,7 @@ test('核心声明只读版本，保存后继续回传且不写入KV', async () 
 
 test('首页显示面板版本', async () => {
   const html = await (await handlePanel(new Request('https://panel.example/'))).text();
-  assert.ok(html.includes(version));
+  assert.ok(html.includes(panelVersion));
 });
 
 test('面板对照当前、旧版、无版本内核，并提供真实更新说明与下载', async () => {
@@ -38,7 +39,7 @@ test('面板对照当前、旧版、无版本内核，并提供真实更新说�
       const html = await response.text();
       for (const [, script] of html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)) new Function(script);
       const context = JSON.parse(html.match(/window\.CFNEW=(.*?);window\.CFNEW\.subUrl/)[1]);
-      assert.equal(context.release.panelVersion, version);
+      assert.equal(context.release.panelVersion, panelVersion);
       assert.equal(context.release.coreVersion, coreVersion || '');
       assert.equal(context.release.needsUpdate, coreVersion !== version);
       assert.equal(context.release.changes.length, 2);

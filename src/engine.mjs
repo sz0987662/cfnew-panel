@@ -72,6 +72,11 @@ let 启用家宽链式 = false;
 
 let 键值配置 = {};
 
+// 优选来源要访问外部接口。合并多个 Worker 时同一份结果只取一次，
+// 按影响结果的开关或地址源分桶，作用域限于本次请求的引擎实例。
+const 优选地址缓存 = new Map();
+const 仓库优选缓存 = new Map();
+
 const supportsFreeCpu = Object.hasOwn(config, 'freeCpu');
 const 配置默认值 = {
   freeCpu: 'no',
@@ -1111,27 +1116,22 @@ async function 生成家宽链式值(链接列表) {
   return 头部.concat(节点段, [''], 分组段, [''], 规则段, ['']).join('\n');
 }
 
-async function 处理订阅请求(请求507, 用户506, 网址505 = null) {
-  if (!网址505) 网址505 = new URL(请求507.url);
+// ECH 参数在收集与转换两段都要用，单独算一次给两处复用。
+function 计算加密客户端问候配置() {
+  if (!启用加密客户端问候) return null;
+  const 域名系统值 = 自定义域名系统 || 'https://223.5.5.5/dns-query';
+  const 加密客户端问候域名 = 自定义加密客户端问候域名 || 'cloudflare-ech.com';
+  return `${加密客户端问候域名}+${域名系统值}`;
+}
+
+// 收集节点链接：按当前配置生成一个 Worker 的节点链接列表。
+// 合并多个 Worker 时逐个切换配置后复用本函数，最后统一转换成目标格式。
+async function 收集节点链接(网址505, 用户506, 别名命名器502) {
   const 最终链接列表 = [];
   const 工作器域名504 = 网址505.hostname;
-  const 目标503 = 网址505.searchParams.get('target') || 'base64';
-  const 家宽目标 = ['vg', 'jk', 解码64('amlha3Vhbg==')].includes(目标503.toLowerCase());
-  if (家宽目标 && !启用家宽链式) {
-    return new Response('家宽链式没开。去配置管理勾上「开启家宽链式」，或者加环境变量 jk=yes。', {
-      status: 403,
-      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }
-    });
-  }
-  const 别名命名器502 = 创建值节点命名器(false);
 
   // 如果启用了ECH，使用自定义值
-  let 加密客户端问候配置501 = null;
-  if (启用加密客户端问候) {
-    const 域名系统值500 = 自定义域名系统 || 'https://223.5.5.5/dns-query';
-    const 加密客户端问候域名499 = 自定义加密客户端问候域名 || 'cloudflare-ech.com';
-    加密客户端问候配置501 = `${加密客户端问候域名499}+${域名系统值500}`;
-  }
+  const 加密客户端问候配置501 = 计算加密客户端问候配置();
   async function 添加节点列表来源列表(列表498) {
     if (启用明文) {
       最终链接列表.push(...生成链接列表来源源(列表498, 用户506, 工作器域名504, 加密客户端问候配置501, false, 别名命名器502));
@@ -1253,6 +1253,27 @@ async function 处理订阅请求(请求507, 用户506, 网址505 = null) {
       }
     }
   }
+  return 最终链接列表;
+}
+
+async function 处理订阅请求(请求507, 用户506, 网址505 = null) {
+  if (!网址505) 网址505 = new URL(请求507.url);
+  const 目标503 = 网址505.searchParams.get('target') || 'base64';
+  const 家宽目标 = ['vg', 'jk', 解码64('amlha3Vhbg==')].includes(目标503.toLowerCase());
+  if (家宽目标 && !启用家宽链式) {
+    return new Response('家宽链式没开。去配置管理勾上「开启家宽链式」，或者加环境变量 jk=yes。', {
+      status: 403,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }
+    });
+  }
+  const 别名命名器502 = 创建值节点命名器(false);
+  const 最终链接列表 = await 收集节点链接(网址505, 用户506, 别名命名器502);
+  return await 生成订阅响应(最终链接列表, 目标503, 启用加密客户端问候 ? 计算加密客户端问候配置() : null);
+}
+
+// 把链接列表转换成目标客户端格式。各格式都以链接列表为唯一输入，
+// 合并多个 Worker 时统一转换一次，不会出现两份配置头或两套分组。
+async function 生成订阅响应(最终链接列表, 目标503, 加密客户端问候配置501) {
   if (最终链接列表.length === 0) {
     const 错误备注 = "所有节点获取失败";
     const 协议484 = atob('dmxlc3M=');
@@ -1323,15 +1344,57 @@ async function 处理订阅请求(请求507, 用户506, 网址505 = null) {
   if (内容类型483.startsWith('application/json')) 响应头部列表.Link = '</rules-license>; rel="license"';
 
   // 添加ECH状态到响应头
-  if (启用加密客户端问候) {
+  if (加密客户端问候配置501) {
     响应头部列表['X-ECH-Status'] = 'ENABLED';
-    if (加密客户端问候配置501) {
-      响应头部列表['X-ECH-Config-Length'] = String(加密客户端问候配置501.length);
-    }
+    响应头部列表['X-ECH-Config-Length'] = String(加密客户端问候配置501.length);
   }
   return new Response(订阅内容, {
     headers: 响应头部列表
   });
+}
+
+// 合并时给节点名加 Worker 标签前缀，客户端里能直接看出节点来自哪个 Worker。
+function 加节点标签前缀(链接列表, 前缀) {
+  if (!前缀) return 链接列表;
+  return 链接列表.map(链接 => {
+    const 位置 = 链接.lastIndexOf('#');
+    if (位置 < 0) return 链接;
+    let 原名 = 链接.slice(位置 + 1);
+    try { 原名 = decodeURIComponent(原名); } catch {}
+    return 链接.slice(0, 位置 + 1) + encodeURIComponent(前缀 + 原名);
+  });
+}
+
+// 合并多个 Worker 的节点到一个订阅。
+// 每个 Worker 先切回自己的配置再收集节点，最后统一转换成目标格式，
+// 因此 clash 的分组、sing-box 的出站只生成一套，不会拼出两份配置。
+async function 处理合并订阅请求(请求507, 条目列表) {
+  const 网址505 = new URL(请求507.url);
+  const 目标503 = 网址505.searchParams.get('target') || 'base64';
+  const 家宽目标 = ['vg', 'jk', 解码64('amlha3Vhbg==')].includes(目标503.toLowerCase());
+  const 别名命名器502 = 创建值节点命名器(false);
+  const 全部链接 = [];
+  let 加密客户端问候配置501 = null;
+  let 首个域名系统 = null;
+  for (const 条目 of 条目列表) {
+    键值配置 = 条目.config;
+    更新配置值();
+    更新自定义优选来源值();
+    当前工作器地区 ||= 'CF';
+    if (家宽目标 && !启用家宽链式) {
+      return new Response('家宽链式没开。去配置管理勾上「开启家宽链式」，或者加环境变量 jk=yes。', {
+        status: 403,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }
+      });
+    }
+    if (首个域名系统 === null) 首个域名系统 = 自定义域名系统;
+    const 链接列表 = await 收集节点链接(new URL(条目.workerBase + '/' + 条目.uuid), 条目.uuid, 别名命名器502);
+    全部链接.push(...加节点标签前缀(链接列表, 条目.prefix));
+    if (!加密客户端问候配置501 && 启用加密客户端问候) 加密客户端问候配置501 = 计算加密客户端问候配置();
+  }
+  // 订阅里的 DNS 设置按第一个 Worker 的配置来，各 Worker 自己的配置不受影响。
+  if (首个域名系统 !== null) 自定义域名系统 = 首个域名系统;
+  return await 生成订阅响应(全部链接, 目标503, 加密客户端问候配置501);
 }
 
 function 生成链接列表来源源(列表482, 用户481, 工作器域名480, 加密客户端问候配置479 = null, 跳过编号478 = false, 别名命名器477 = null) {
@@ -1519,6 +1582,8 @@ async function 获取值地址列表() {
   const 值值432 = 获取配置值('ispMobile', '') === '' || 获取配置值('ispMobile', 'yes') !== 'no';
   const 值值431 = 获取配置值('ispUnicom', '') === '' || 获取配置值('ispUnicom', 'yes') !== 'no';
   const 值值430 = 获取配置值('ispTelecom', '') === '' || 获取配置值('ispTelecom', 'yes') !== 'no';
+  const 缓存键434 = [值4已启用, 值6已启用, 值值432, 值值431, 值值430].map(值 => (值 ? 1 : 0)).join('');
+  if (优选地址缓存.has(缓存键434)) return 优选地址缓存.get(缓存键434);
   try {
     const 时间戳434 = String(Date.now());
     const 内层摘要434 = await 计算值摘要(解码64('RGRsVHh0TjBzVU91'));
@@ -1553,6 +1618,7 @@ async function 获取值地址列表() {
         });
       }
     }
+    优选地址缓存.set(缓存键434, 结果列表433);
     return 结果列表433;
   } catch (事件值427) {}
   return [];
@@ -4433,6 +4499,8 @@ function 获取叉HTTP填充标识(标识串) {
 
 async function 获取值解析新地址列表() {
   const 网址113 = 优选地址源;
+  if (!网址113) return [];
+  if (仓库优选缓存.has(网址113)) return 仓库优选缓存.get(网址113);
   try {
     const 网址列表112 = 网址113.includes(',') ? 网址113.split(',').map(网址值111 => 网址值111.trim()).filter(网址值 => 网址值) : [网址113];
     const 接口结果列表 = await 获取优选接口(网址列表112, '443', 5000);
@@ -4449,6 +4517,7 @@ async function 获取值解析新地址列表() {
           });
         }
       }
+      仓库优选缓存.set(网址113, 结果列表110);
       return 结果列表110;
     }
     const 响应107 = await fetch(网址113);
@@ -4469,6 +4538,7 @@ async function 获取值解析新地址列表() {
         });
       }
     }
+    仓库优选缓存.set(网址113, 结果列表105);
     return 结果列表105;
   } catch (错误101) {
     return [];
@@ -4803,7 +4873,7 @@ function createEngine(config, uuid) {
 更新配置值();
 当前工作器地区 ||= 'CF';
 更新自定义优选来源值();
-return { render: request => 处理订阅值(request, uuid), subscribe: request => 处理订阅请求(request, uuid), defaults: 配置默认值 };
+return { render: request => 处理订阅值(request, uuid), subscribe: request => 处理订阅请求(request, uuid), subscribeMerged: (request, entries) => 处理合并订阅请求(request, entries), defaults: 配置默认值 };
 }
 return createEngine(config, uuid);
 }
