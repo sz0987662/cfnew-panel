@@ -29,6 +29,18 @@
     <small>代理流量直接连接 Worker。订阅从本服务更新。</small>
   </form>
   </div>
+  <div class="card merge-card">
+  <div class="brand">合并订阅</div>
+  <p class="merge-hint">把多个 Worker 的节点合到一份订阅，客户端一次更新。每个 Worker 用自己的配置、UUID 和域名。</p>
+  <div id="mergeList" class="merge-list"></div>
+  <div class="merge-actions">
+    <button type="button" id="addMerge">添加 Worker</button>
+    <button type="button" id="clearMerge">清空清单</button>
+  </div>
+  <div id="mergeLinks" class="merge-links"></div>
+  <small id="mergeStatus" role="status" hidden></small>
+  <small>清单只存在这台设备。订阅链接带着域名和 UUID，相当于访问凭据，别公开分享。</small>
+  </div>
   <small id="panelVersion">面板版本 __CFNEW_PANEL_VERSION__</small>
 </main>
 <script>
@@ -75,6 +87,105 @@ deleteNode.addEventListener('click',()=>{
   historyStatus.textContent='已删除这台设备上的记录，Worker 配置不受影响。';historyStatus.hidden=false;
 });
 document.querySelector('form').addEventListener('submit',()=>{if(!document.getElementById('remember').checked)return;const node={host:document.getElementById('host').value.trim(),uuid:document.getElementById('uuid').value.trim()};try{localStorage.setItem('cfnew-panel-nodes',JSON.stringify([node,...nodes.filter(item=>item.host!==node.host)].slice(0,20)))}catch{}});
+
+// 合并订阅：多个 Worker 的节点合到一份订阅里。清单存在本机，链接里带域名和 UUID。
+const mergeStorageKey='cfnew-panel-merge';
+const mergeLimit=10;
+const mergeList=document.getElementById('mergeList');
+const mergeLinks=document.getElementById('mergeLinks');
+const mergeStatus=document.getElementById('mergeStatus');
+const addMerge=document.getElementById('addMerge');
+const clearMerge=document.getElementById('clearMerge');
+const mergeTargets=[['base64','通用 / v2ray'],['clash','Clash / Mihomo'],['singbox','sing-box'],['surge','Surge'],['loon','Loon'],['quanx','Quantumult X']];
+let mergeNodes=[];
+try{
+  const saved=JSON.parse(localStorage.getItem(mergeStorageKey)||'[]');
+  if(Array.isArray(saved))mergeNodes=saved.filter(node=>node&&typeof node.host==='string'&&typeof node.uuid==='string').slice(0,mergeLimit);
+}catch{}
+function mergeSave(){
+  try{localStorage.setItem(mergeStorageKey,JSON.stringify(mergeNodes));}
+  catch{mergeStatus.textContent='浏览器没能保存这份清单，关掉页面会丢失。';mergeStatus.hidden=false;}
+}
+function mergeEncode(list){
+  const json=JSON.stringify(list.map(node=>{
+    const item={host:node.host.trim(),uuid:node.uuid.trim()};
+    const name=node.name?node.name.trim():'';
+    if(name)item.name=name;
+    return item;
+  }));
+  const bytes=new TextEncoder().encode(json);
+  let binary='';
+  for(const byte of bytes)binary+=String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function mergeRenderLinks(){
+  mergeLinks.replaceChildren();
+  const usable=mergeNodes.filter(node=>node.host.trim()&&node.uuid.trim());
+  if(!usable.length){
+    const hint=document.createElement('small');
+    hint.textContent=mergeNodes.length?'每行都填上域名和 UUID 后才生成链接。':'先添加一个 Worker。';
+    mergeLinks.append(hint);
+    return;
+  }
+  const encoded=mergeEncode(usable);
+  for(const [target,label] of mergeTargets){
+    const url=location.origin+'/merge/sub?workers='+encoded+'&target='+target;
+    const row=document.createElement('div');
+    row.className='merge-link';
+    const link=document.createElement('a');
+    link.href=url;link.textContent=label;link.target='_blank';link.rel='noopener';
+    const copy=document.createElement('button');
+    copy.type='button';copy.textContent='复制';
+    copy.setAttribute('aria-label','复制'+label+'订阅链接');
+    copy.addEventListener('click',async()=>{
+      try{await navigator.clipboard.writeText(url);mergeStatus.textContent=label+' 链接已复制。';}
+      catch{mergeStatus.textContent='复制失败，请手动选中链接复制。';}
+      mergeStatus.hidden=false;
+    });
+    row.append(link,copy);
+    mergeLinks.append(row);
+  }
+}
+function mergeRender(){
+  mergeList.replaceChildren();
+  mergeNodes.forEach((node,index)=>{
+    const row=document.createElement('div');
+    row.className='merge-row';
+    const fields=[['host','Worker 域名','a.example.com'],['uuid','UUID 或自定义路径','你的 UUID'],['name','标签','香港']];
+    for(const [key,placeholder,label] of fields){
+      const input=document.createElement('input');
+      input.type='text';input.placeholder=placeholder;input.value=node[key]||'';input.setAttribute('aria-label',label);
+      input.addEventListener('input',()=>{node[key]=input.value;mergeSave();mergeRenderLinks();});
+      row.append(input);
+    }
+    const actions=document.createElement('div');
+    actions.className='merge-row-actions';
+    const open=document.createElement('a');
+    open.textContent='控制台';
+    open.href='/panel?'+new URLSearchParams({host:node.host.trim(),uuid:node.uuid.trim()});
+    open.target='_blank';open.rel='noopener';
+    const remove=document.createElement('button');
+    remove.type='button';remove.textContent='删除';remove.setAttribute('aria-label','删除这一行');
+    remove.addEventListener('click',()=>{mergeNodes.splice(index,1);mergeSave();mergeRender();});
+    actions.append(open,remove);
+    row.append(actions);
+    mergeList.append(row);
+  });
+  addMerge.disabled=mergeNodes.length>=mergeLimit;
+  if(mergeNodes.length>=mergeLimit)mergeStatus.textContent='最多 '+mergeLimit+' 个 Worker。';
+  else if(mergeStatus.textContent.startsWith('最多'))mergeStatus.textContent='';
+  mergeRenderLinks();
+}
+addMerge.addEventListener('click',()=>{
+  if(mergeNodes.length>=mergeLimit)return;
+  mergeNodes.push({host:'',uuid:'',name:''});
+  mergeSave();mergeRender();
+});
+clearMerge.addEventListener('click',()=>{
+  mergeNodes=[];mergeSave();mergeRender();
+  mergeStatus.textContent='清单已清空，Worker 本身不受影响。';mergeStatus.hidden=false;
+});
+mergeRender();
 </script>
 </body>
 </html>

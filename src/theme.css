@@ -971,3 +971,24 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .cp-cpu-switch input:focus-visible { outline: 2px solid var(--cp-yellow); outline-offset: 4px; }
 .cp-cpu-switch:has(input:disabled) { cursor: default; color: var(--cp-text-dim); }
 #freeCpuHint { display: block; max-width: 72ch; color: var(--cp-text-dim); line-height: 1.6; font-size: .85rem; }
+
+/* 合并订阅沿用登录页的卡片、输入框与按钮，只补清单行的排布。 */
+.landing .merge-card { margin-top: 24px; }
+.landing .merge-hint { margin-top: 0; color: var(--cp-text-dim); font-size: .82rem; line-height: 1.7; }
+.landing .merge-list { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+.landing .merge-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; padding: 14px; border: 1px solid var(--cp-border); }
+.landing .merge-row input:nth-child(3) { grid-column: 1 / -1; }
+.landing .merge-row-actions { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; }
+.landing .merge-row-actions a { color: var(--cp-mint); text-decoration: underline; font-size: .8rem; }
+.landing .merge-row-actions button { margin-left: auto; min-height: 40px; padding: 8px 12px !important; color: var(--cp-red) !important; border-color: var(--cp-red) !important; }
+.landing .merge-actions { display: flex; gap: 10px; margin-top: 16px; }
+.landing .merge-actions button { min-height: 44px; flex: 1; }
+.landing .merge-links { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
+.landing .merge-links > small { margin-top: 0; }
+.landing .merge-link { display: flex; gap: 10px; align-items: center; }
+.landing .merge-link a { flex: 1; min-width: 0; color: var(--cp-cyan); text-decoration: underline; font-size: .85rem; overflow-wrap: anywhere; }
+.landing .merge-link button { flex: none; min-height: 40px; padding: 8px 12px !important; }
+@media (max-width: 540px) {
+  .landing .merge-row { grid-template-columns: 1fr; }
+  .landing .merge-row input:nth-child(3), .landing .merge-row-actions { grid-column: 1; }
+}

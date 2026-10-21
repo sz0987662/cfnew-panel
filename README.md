@@ -65,6 +65,34 @@ Clash： /sub?host=your-worker.example.com&uuid=你的UUID&target=clash
 
 未绑定 Worker KV 仍可读取环境配置并生成订阅，但页面不能保存。原来直接指向 Worker 的 `/sub` 需替换成独立面板生成的新订阅。
 
+## 多 Worker 合并订阅
+
+手里有多个 Worker 时，可以把它们的节点合成一份订阅，客户端一次更新。
+
+在首页「合并订阅」卡片里逐行填写 Worker 域名、UUID 或自定义路径，再填一个标签（不填就用域名的第一段）。清单只存在这台设备的浏览器里，面板不保存它。
+
+每种客户端的订阅链接直接给在卡片下方，复制给客户端即可：
+
+```text
+https://面板域名/merge/sub?workers=<清单>&target=clash
+```
+
+`workers` 是 base64url 编码的清单，内容就是首页填写的域名、UUID 和标签：
+
+```json
+[{"host":"hk.example.com","uuid":"你的UUID","name":"香港"},{"host":"jp.example.com","uuid":"你的UUID","name":"日本"}]
+```
+
+- `target` 与单 Worker 订阅一致，支持 `base64`、`v2ray`、`clash`、`stash`、`singbox`、`surge`、`loon`、`quanx`。
+- 节点名会加标签前缀，例如 `[香港] 电信-01`，客户端里能直接看出节点来自哪个 Worker。
+- 每个 Worker 用自己保存的配置生成节点：传输方式、优选列表、协议开关都各算各的。
+- Clash 只生成一份配置，sing-box 只有一套出站，不会拼出两套分组。
+- 某个 Worker 读不到配置时，其余 Worker 照常出订阅，响应头带 `X-CFnew-Partial: 1`。
+- 一次最多 10 个 Worker。清单在链接里，链接会变长，等同访问凭据，别公开分享。
+- 绑定了 `w` 的面板只认自己那个 Worker，清单里写别的域名会被拒绝。
+
+单 Worker 的控制台和订阅不受影响，仍然是 `/UUID` 和 `/UUID/sub`。
+
 ## Free CPU 保护
 
 更新配套内核到 `2026.10.17.2`，在“配置管理”开启 **Free CPU 保护**，保存后对新连接生效。默认关闭，旧内核会提示更新。
@@ -100,6 +128,7 @@ docker compose up -d --build
 
 - 一键部署得到自己的仓库副本。更新面板源码需同步上游并重新部署；修改环境变量也要重新部署。
 - 原 WebSocket、XHTTP、出站代理、ECH、IPv6 与客户端订阅生成保留；代理数据面仍由配套核心处理。
+- 多 Worker 合并订阅只影响订阅输出；控制台与单 Worker 订阅保持原样。
 - 在线 IP 检测在面板服务器执行，延迟是服务器视角。Vercel 实测 IPv4 检测可用，IPv6 在线检测出现平台出站错误；IPv6 节点生成和 Worker 实际连接已验证，不能用在线检测结果代替客户端测速。
 - sing-box 使用 1.12 起的 DNS / 路由格式，内置分流规则，不要求启动时下载规则文件。规则许可见 [NOTICE](./NOTICE.md) 和 `/rules-license`。
 - 请求正文上限 1 MiB，大量地址可改用在线列表 URL。健康检查为 `/health`。
