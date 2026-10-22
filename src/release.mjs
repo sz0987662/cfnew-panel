@@ -1,6 +1,6 @@
 // 面板版本与配套内核版本分开记。面板只加功能时不用换内核，
 // 只有内核改了才提示更新，避免让用户白换一次内核。
-export const PANEL_VERSION = '2026.10.18.1';
+export const PANEL_VERSION = '2026.10.22.1';
 export const CORE_VERSION = '2026.10.17.2';
 
 export function coreRelease(config) {

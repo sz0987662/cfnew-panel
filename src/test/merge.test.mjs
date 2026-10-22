@@ -23,6 +23,23 @@ function 条目(host, access, prefix) {
   return { workerBase: host, access, prefix };
 }
 
+// 用仓库里的隔离内核起一个本地 Worker，活性检查需要真实的配置接口。
+async function 起隔离Worker(配置) {
+  const source = await readFile(process.env.CFNEW_TEST_CORE || new URL('../../test/core-fixture.mjs', import.meta.url), 'utf8');
+  const worker = (await import('data:text/javascript;base64,' + Buffer.from(source.replace(/import\s*\{\s*connect as ([^}]+)\}\s*from\s*['"]cloudflare:sockets['"];/, () => 'const 连接 = () => { throw new Error("此测试不建立代理连接"); };')).toString('base64'))).default;
+  const values = new Map([['c', JSON.stringify(配置)]]);
+  const storage = { get: async (key, type) => type === 'json' ? JSON.parse(values.get(key) || 'null') : values.get(key), put: async (key, value) => values.set(key, value) };
+  const server = createServer(async (incoming, outgoing) => {
+    const chunks = []; for await (const chunk of incoming) chunks.push(chunk);
+    const body = Buffer.concat(chunks);
+    const response = await worker.fetch(new Request('http://127.0.0.1' + incoming.url, { method: incoming.method, ...(body.length ? { body } : {}) }), { u: uuid, C: storage });
+    const text = await response.text();
+    outgoing.writeHead(response.status, Object.fromEntries(response.headers)); outgoing.end(text);
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  return { host: 'http://127.0.0.1:' + server.address().port, close: () => new Promise(resolve => server.close(resolve)) };
+}
+
 async function 合并(target, 条目列表, 映射) {
   const request = new Request('https://panel.example/merge/sub?target=' + target);
   return await 生成合并订阅(request, 条目列表, 假加载(映射));
@@ -173,24 +190,63 @@ test('落地页生成的链接能直接被面板处理', async () => {
   assert.match(await response.text(), /订阅更新失败/);
 });
 
-test('本地隔离Worker的合并订阅可正常生成', async () => {
-  const source = await readFile(process.env.CFNEW_TEST_CORE || new URL('../../test/core-fixture.mjs', import.meta.url), 'utf8');
-  const worker = (await import('data:text/javascript;base64,' + Buffer.from(source.replace(/import\s*\{\s*connect as ([^}]+)\}\s*from\s*['"]cloudflare:sockets['"];/, () => 'const 连接 = () => { throw new Error("此测试不建立代理连接"); };')).toString('base64'))).default;
-  async function 起Worker(配置) {
-    const values = new Map([['c', JSON.stringify(配置)]]);
-    const storage = { get: async (key, type) => type === 'json' ? JSON.parse(values.get(key) || 'null') : values.get(key), put: async (key, value) => values.set(key, value) };
-    const server = createServer(async (incoming, outgoing) => {
-      const chunks = []; for await (const chunk of incoming) chunks.push(chunk);
-      const body = Buffer.concat(chunks);
-      const response = await worker.fetch(new Request('http://127.0.0.1' + incoming.url, { method: incoming.method, ...(body.length ? { body } : {}) }), { u: uuid, C: storage });
-      let text = await response.text();
-      outgoing.writeHead(response.status, Object.fromEntries(response.headers)); outgoing.end(text);
-    });
-    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-    return { host: 'http://127.0.0.1:' + server.address().port, close: () => new Promise(resolve => server.close(resolve)) };
+test('生成订阅前的活性检查按勾选顺序返回状态，失败项给出原因', async () => {
+  const 甲 = await 起隔离Worker({ d: '/Admin/Panel', ev: 'yes', epi: 'yes', epd: 'no', egi: 'no', ena: 'no', yx: '104.16.1.1:443#甲' });
+  try {
+    const 检查 = await handlePanel(new Request('https://panel.example/api/merge/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workers: [{ host: 甲.host, uuid }, { host: 'http://127.0.0.1:1', uuid }] })
+    }));
+    assert.equal(检查.status, 200);
+    const 结果 = await 检查.json();
+    assert.equal(结果.success, true);
+    assert.equal(结果.results.length, 2, '顺序与勾选一致');
+    assert.equal(结果.results[0].ok, true);
+    assert.ok(Number.isFinite(结果.results[0].ms), '在线项带上面板视角的耗时');
+    assert.equal(结果.results[1].ok, false);
+    assert.ok(结果.results[1].message, '失败项要给出原因');
+  } finally {
+    await 甲.close();
   }
-  const 甲 = await 起Worker({ d: '/Admin/Panel', ev: 'yes', epi: 'yes', epd: 'no', egi: 'no', ena: 'no', yx: '104.16.1.1:443#甲' });
-  const 乙 = await 起Worker({ d: '/Admin/Panel', ev: 'yes', epi: 'yes', epd: 'no', egi: 'no', ena: 'no', yx: '104.16.2.2:443#乙' });
+});
+
+test('活性检查拒绝空清单、超限和错误方法', async () => {
+  const 空 = await handlePanel(new Request('https://panel.example/api/merge/check', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workers: [] })
+  }));
+  assert.equal(空.status, 400);
+  assert.match(await 空.text(), /请先勾选/);
+  const 超限 = await handlePanel(new Request('https://panel.example/api/merge/check', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workers: Array.from({ length: 合并条目上限 + 1 }, () => ({ host: 'a.example.com', uuid })) })
+  }));
+  assert.equal(超限.status, 400);
+  assert.match(await 超限.text(), /最多检查/);
+  const 方法 = await handlePanel(new Request('https://panel.example/api/merge/check'));
+  assert.equal(方法.status, 405);
+});
+
+test('固定 w 的面板只允许检查自己的 Worker', async () => {
+  process.env.w = 'https://a.example.com';
+  try {
+    const 响应 = await handlePanel(new Request('https://panel.example/api/merge/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workers: [{ host: 'https://b.example.com', uuid }] })
+    }));
+    assert.equal(响应.status, 200);
+    const 结果 = await 响应.json();
+    assert.equal(结果.results[0].ok, false);
+    assert.match(结果.results[0].message, /仅允许接入指定的 Worker/);
+  } finally {
+    delete process.env.w;
+  }
+});
+
+test('本地隔离Worker的合并订阅可正常生成', async () => {
+  const 甲 = await 起隔离Worker({ d: '/Admin/Panel', ev: 'yes', epi: 'yes', epd: 'no', egi: 'no', ena: 'no', yx: '104.16.1.1:443#甲' });
+  const 乙 = await 起隔离Worker({ d: '/Admin/Panel', ev: 'yes', epi: 'yes', epd: 'no', egi: 'no', ena: 'no', yx: '104.16.2.2:443#乙' });
   try {
     const 参数 = 编码合并清单([{ host: 甲.host, uuid, name: '甲' }, { host: 乙.host, uuid, name: '乙' }]);
     const response = await handlePanel(new Request('https://panel.example/merge/sub?workers=' + 参数 + '&target=base64'));

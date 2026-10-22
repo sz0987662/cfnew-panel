@@ -6,7 +6,7 @@ import test from 'node:test';
 process.env.CFNEW_ALLOW_PRIVATE = 'yes';
 const { handlePanel } = await import('../server.mjs');
 const version = '2026.10.17.2';
-const panelVersion = '2026.10.18.1';
+const panelVersion = '2026.10.22.1';
 const uuid = '351c9981-04b6-4103-aa4b-864aa9c91469';
 const source = await readFile(process.env.CFNEW_TEST_CORE || new URL('../../明文源吗', import.meta.url), 'utf8');
 const worker = (await import('data:text/javascript;base64,' + Buffer.from(source.replace(/import\s*\{\s*connect as ([^}]+)\}\s*from\s*['"]cloudflare:sockets['"];/, (_, name) => 'const ' + name.trim() + ' = () => { throw new Error("此测试不建立代理连接"); };')).toString('base64'))).default;

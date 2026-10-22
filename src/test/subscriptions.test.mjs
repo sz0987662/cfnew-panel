@@ -102,3 +102,19 @@ test('没有备注的压缩IPv6仍生成默认名称，裸地址不误拆端口'
   assert.ok(links.every(link => link.hostname === '[2606:4700::1111]'));
   assert.ok(links.every(link => decodeURIComponent(link.hash.slice(1)).startsWith('IPv6优选-')));
 });
+
+test('域名节点沿用自定义名字，同名自动编号，未命名仍是优选域名', async () => {
+  const 覆盖 = { yx: 'a.example.com:443#我的域名\nb.example.com:8443#我的域名\nc.example.com:443', et: 'no', ex: 'no', epd: 'yes', epi: 'yes' };
+  const text = Buffer.from(await subscription('base64', 覆盖), 'base64').toString('utf8');
+  const 名称列表 = text.trim().split('\n').map(link => decodeURIComponent(new URL(link).hash.slice(1)));
+  assert.deepEqual(名称列表, ['我的域名-01', '我的域名-02', '优选域名-01'], '同名域名按编号区分，没填名字的保持原名');
+  for (const target of ['clash', 'singbox', 'loon', 'quanx']) {
+    const converted = await subscription(target, 覆盖);
+    for (const 名称 of 名称列表) assert.ok(converted.includes(名称), target + ' 缺少 ' + 名称);
+  }
+  // Surge 只收 Trojan 节点，名字同样沿用自定义值。
+  assert.match(await subscription('surge', { ...覆盖, et: 'yes' }), /我的域名-\d+/);
+  const 内置 = Buffer.from(await subscription('base64', { et: 'no', ex: 'no', yx: '', epd: 'yes', epi: 'no', egi: 'no' }), 'base64').toString('utf8');
+  const 内置名称 = 内置.trim().split('\n').map(link => decodeURIComponent(new URL(link).hash.slice(1)));
+  assert.ok(内置名称.every(名称 => /^优选域名-\d+$/.test(名称)), '内置域名列表保持优选域名-NN');
+});

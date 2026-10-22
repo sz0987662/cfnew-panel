@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { createSubscriptionEngine } from './engine.mjs';
 import { isPublicAddress, fetchPreferredList, probePreferred } from './preferred.mjs';
 import { PANEL_VERSION, coreRelease } from './release.mjs';
-import { 解析合并清单, 生成合并订阅, 默认标签 } from './merge.mjs';
+import { 解析合并清单, 生成合并订阅, 默认标签, 合并条目上限 } from './merge.mjs';
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const privateTesting = process.env.CFNEW_ALLOW_PRIVATE === 'yes';
@@ -178,6 +178,28 @@ async function handleMergeSubscription(request, url) {
   }
 }
 
+// 合并订阅前先检查勾选的 Worker：只读配置接口，沿用与订阅相同的域名校验、公网校验和缓存。
+// 返回顺序与请求一致，某项失败时给出原因，其余照常可用。
+async function handleMergeCheck(request) {
+  let body;
+  try { body = await request.json(); } catch { return Response.json({ success: false, message: '清单格式无效' }, { status: 400 }); }
+  const workers = body && Array.isArray(body.workers) ? body.workers : null;
+  if (!workers || !workers.length) return Response.json({ success: false, message: '请先勾选 Worker' }, { status: 400 });
+  if (workers.length > 合并条目上限) return Response.json({ success: false, message: '一次最多检查 ' + 合并条目上限 + ' 个 Worker' }, { status: 400 });
+  const results = await Promise.all(workers.map(async 项 => {
+    const started = Date.now();
+    try {
+      const workerBase = selectWorker(项 && 项.host);
+      const access = normalizeAccess(项 && 项.uuid);
+      await loadWorkerConfig(workerBase, access);
+      return { host: workerBase, ok: true, ms: Date.now() - started };
+    } catch (error) {
+      return { host: String((项 && 项.host) || ''), ok: false, ms: Date.now() - started, message: String(error.message || '检查失败') };
+    }
+  }));
+  return Response.json({ success: true, results });
+}
+
 export async function handlePanel(request) {
   const url = new URL(request.url);
   if (url.pathname.startsWith('/worker-api/')) {
@@ -204,6 +226,10 @@ export async function handlePanel(request) {
     } catch (error) {
       return Response.json({ success: false, message: error.message, latency: -1 }, { status: error.status || 400 });
     }
+  }
+  if (url.pathname === '/api/merge/check') {
+    if (request.method !== 'POST') return Response.json({ success: false, message: '只支持 POST' }, { status: 405 });
+    return handleMergeCheck(request);
   }
   if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('只支持 GET', { status: 405 });
   if (url.pathname === '/health') return Response.json({ ok: true });

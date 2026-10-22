@@ -937,10 +937,6 @@ body.landing { display: grid; place-items: center; padding: 32px 24px; }
 .landing .remember input { margin: 0; width: 18px; height: 18px; flex: none; }
 .landing button[type=submit] { width: 100%; min-height: 48px; margin-top: 28px; }
 .landing small { display: block; margin-top: 16px; line-height: 1.7; letter-spacing: .02em; }
-.landing .history-row { display: flex; gap: 10px; align-items: center; margin-top: 20px; }
-.landing .history-row select { flex: 1; margin-top: 0; }
-#deleteNode { flex: none; min-height: 46px; padding: 10px 12px !important; color: var(--cp-red) !important; border-color: var(--cp-red) !important; letter-spacing: .02em !important; white-space: nowrap; }
-#deleteNode:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
 #panelVersion { text-align: center; margin-top: 24px; }
 input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--cp-pink); outline-offset: 4px; }
 #coreVersionStatus { box-sizing: border-box; max-width: 1180px; margin: 24px auto 12px; padding: 16px 20px; line-height: 1.7; background: var(--cp-bg-2); border: 1px solid var(--cp-amber); color: var(--cp-text); text-align: start; overflow-wrap: anywhere; }
@@ -958,8 +954,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
   .landing .title { font-size: 1.6rem; letter-spacing: .02em; }
   .landing .card { padding: 24px 18px; }
   .landing .header::before, .landing .header::after { font-size: 8px; letter-spacing: .1em; }
-  .landing .history-row { gap: 8px; }
-  #deleteNode { font-size: .72rem !important; padding: 10px !important; }
   #coreVersionStatus { margin: 16px 14px 12px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
@@ -972,23 +966,47 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .cp-cpu-switch:has(input:disabled) { cursor: default; color: var(--cp-text-dim); }
 #freeCpuHint { display: block; max-width: 72ch; color: var(--cp-text-dim); line-height: 1.6; font-size: .85rem; }
 
-/* 合并订阅沿用登录页的卡片、输入框与按钮，只补清单行的排布。 */
+/* 我的 Worker：一份清单，勾选后打开控制台或合并订阅。 */
 .landing .merge-card { margin-top: 24px; }
 .landing .merge-hint { margin-top: 0; color: var(--cp-text-dim); font-size: .82rem; line-height: 1.7; }
-.landing .merge-list { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
-.landing .merge-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; padding: 14px; border: 1px solid var(--cp-border); }
-.landing .merge-row input:nth-child(3) { grid-column: 1 / -1; }
-.landing .merge-row-actions { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; }
-.landing .merge-row-actions a { color: var(--cp-mint); text-decoration: underline; font-size: .8rem; }
-.landing .merge-row-actions button { margin-left: auto; min-height: 40px; padding: 8px 12px !important; color: var(--cp-red) !important; border-color: var(--cp-red) !important; }
+.landing .merge-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; }
+.landing .merge-selectall { display: flex; align-items: center; gap: 8px; margin-top: 0; color: var(--cp-cyan) !important; font-size: .82rem; text-shadow: none; }
+.landing .merge-selectall input { margin: 0; width: 18px; height: 18px; flex: none; accent-color: var(--cp-cyan); }
+.landing .merge-count { font-size: .74rem; letter-spacing: .04em; color: var(--cp-text-dim); }
+.landing .merge-count.over { color: var(--cp-red); }
+.landing .merge-list { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
+.landing .merge-empty { margin-top: 0; color: var(--cp-text-dim); font-size: .8rem; }
+.landing .merge-row { display: grid; grid-template-columns: auto 1fr auto; align-items: start; gap: 10px; padding: 14px; border: 1px solid var(--cp-border); }
+.landing .merge-row.picked { border-color: var(--cp-cyan); box-shadow: inset 0 0 0 1px rgba(0, 240, 255, .18); }
+.landing .merge-pick { display: flex; margin-top: 10px; }
+.landing .merge-pick input { margin: 0; width: 18px; height: 18px; flex: none; accent-color: var(--cp-cyan); }
+.landing .merge-fields { display: grid; gap: 8px; min-width: 0; }
+.landing .merge-fields input { margin-top: 0; }
+.landing .merge-row-actions { display: flex; flex-direction: column; gap: 6px; }
+.landing .merge-open { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 6px 10px; border: 1px solid var(--cp-border); background: linear-gradient(135deg, rgba(0, 240, 255, .12), rgba(255, 43, 214, .12)); color: var(--cp-cyan); font-size: .72rem; letter-spacing: .06em; text-decoration: none; white-space: nowrap; clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px); }
+.landing .merge-open:hover { color: var(--cp-pink); border-color: var(--cp-pink); }
+.landing .merge-open.disabled { opacity: .4; cursor: not-allowed; pointer-events: none; }
+.landing .merge-remove { min-height: 38px; padding: 6px 10px !important; color: var(--cp-red) !important; border-color: var(--cp-red) !important; }
+.landing .merge-remove.confirming { color: var(--cp-yellow) !important; border-color: var(--cp-yellow) !important; box-shadow: 0 0 12px rgba(255, 242, 0, .3); }
 .landing .merge-actions { display: flex; gap: 10px; margin-top: 16px; }
 .landing .merge-actions button { min-height: 44px; flex: 1; }
+.landing .merge-primary { display: flex; gap: 10px; margin-top: 12px; }
+.landing .merge-primary button { flex: 1; min-height: 46px; }
+.landing #generateSub { color: var(--cp-mint) !important; border-color: var(--cp-mint) !important; text-shadow: 0 0 6px var(--cp-mint) !important; }
+.landing #generateSub:hover { color: var(--cp-pink) !important; border-color: var(--cp-pink) !important; }
+.landing .merge-primary button:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; transform: none; }
+.landing .merge-check { display: flex; flex-direction: column; gap: 6px; margin-top: 18px; padding: 14px; border: 1px dashed var(--cp-border); }
+.landing .merge-check-row { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; font-size: .8rem; overflow-wrap: anywhere; }
+.landing .merge-check-name { color: var(--cp-text); }
+.landing .merge-check-row .ok { color: var(--cp-mint); }
+.landing .merge-check-row .fail { color: var(--cp-red); }
 .landing .merge-links { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
 .landing .merge-links > small { margin-top: 0; }
 .landing .merge-link { display: flex; gap: 10px; align-items: center; }
 .landing .merge-link a { flex: 1; min-width: 0; color: var(--cp-cyan); text-decoration: underline; font-size: .85rem; overflow-wrap: anywhere; }
 .landing .merge-link button { flex: none; min-height: 40px; padding: 8px 12px !important; }
 @media (max-width: 540px) {
-  .landing .merge-row { grid-template-columns: 1fr; }
-  .landing .merge-row input:nth-child(3), .landing .merge-row-actions { grid-column: 1; }
+  .landing .merge-row { grid-template-columns: auto 1fr; gap: 8px; }
+  .landing .merge-row-actions { grid-column: 2; flex-direction: row; }
+  .landing .merge-open, .landing .merge-remove { min-height: 36px; }
 }
